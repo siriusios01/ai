@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hệ Thống Shop Auto Account - SiriusFF V8</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -11,9 +12,34 @@
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0f172a; }
         .page-view { display: none; }
         .page-view.active { display: block; }
+        
+        /* CSS cho hệ thống thông báo Toast tùy biến ngoài trình duyệt thường */
+        #custom-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background-color: #1e293b;
+            border: 1px border #334155;
+            padding: 12px 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            transform: translateY(-100px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #custom-toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="text-slate-200 min-h-screen flex flex-col">
+
+    <div id="custom-toast" class="flex items-center gap-3">
+        <span id="toast-icon" class="text-emerald-400 text-lg"></span>
+        <p id="toast-msg" class="text-xs sm:text-sm font-semibold text-white"></p>
+    </div>
 
     <nav class="bg-[#1e293b] border-b border-slate-700 sticky top-0 z-40 shadow-md">
         <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -84,8 +110,7 @@
             <button onclick="navigateTo('shop')" class="text-xs text-slate-400 hover:text-white mb-4 flex items-center gap-1 transition"><i class="fa-solid fa-arrow-left"></i> Quay lại cửa hàng</button>
             <h2 class="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2 flex items-center gap-2"><i class="fa-solid fa-basket-shopping text-emerald-400"></i> Xác Nhận Thanh Toán Đơn Hàng</h2>
             
-            <div id="checkout-details" class="space-y-4 text-sm">
-                </div>
+            <div id="checkout-details" class="space-y-4 text-sm"></div>
         </div>
 
         <div id="view-history" class="page-view">
@@ -230,6 +255,27 @@
     </main>
 
     <script>
+        // Đồng bộ và thông báo mượt mà thay thế alert() thô ráp của trình duyệt
+        function showNotification(title, message, isSuccess = true) {
+            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.showPopup) {
+                window.Telegram.WebApp.showPopup({
+                    title: title,
+                    message: message,
+                    buttons: [{ type: 'ok', id: 'ok_btn' }]
+                });
+            } else {
+                const toast = document.getElementById('custom-toast');
+                const tIcon = document.getElementById('toast-icon');
+                const tMsg = document.getElementById('toast-msg');
+                
+                tIcon.className = isSuccess ? "fa-solid fa-circle-check text-emerald-400" : "fa-solid fa-triangle-exclamation text-rose-500";
+                tMsg.innerText = message;
+                
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            }
+        }
+
         const defaultProducts = [
             { id: 101, name: "ChatGPT Plus 1 Tháng", logo: "https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg", desc: "Tài khoản mở full tính năng GPT-4o bảo hành đổi mới 30 ngày nếu lỗi.", price: 100000, accounts: ["chatgpt_vip1|pass888", "chatgpt_vip2|pass999", "chatgpt_vip3|pass111"] },
             { id: 102, name: "Netflix Premium UltraHD", logo: "https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg", desc: "Xem phim chất lượng 4K UHD siêu nét, profile riêng tư không trùng.", price: 80000, accounts: ["netflix_acc1@gmail.com|movies99", "netflix_acc2@gmail.com|cinema123"] }
@@ -239,7 +285,6 @@
             { code: "SIRIUS", discount: 50 }
         ];
 
-        // Khởi động lưu trữ key sys_v8 đồng bộ toàn sàn
         let products = JSON.parse(localStorage.getItem('sys_v8_products')) || defaultProducts;
         let coupons = JSON.parse(localStorage.getItem('sys_v8_coupons')) || defaultCoupons;
         let ordersHistory = JSON.parse(localStorage.getItem('sys_v8_history')) || [];
@@ -254,7 +299,6 @@
         };
         localStorage.setItem('sys_v8_users_db', JSON.stringify(usersDB));
 
-        // Đối tượng lưu trạng thái đơn hàng đang xem xét mua hàng
         let currentCheckoutItem = null;
         let activeTempDepositAmount = 0;
 
@@ -272,7 +316,7 @@
 
         function navigateTo(viewId) {
             if (!currentUser && viewId !== 'auth') {
-                alert("Bạn cần đăng ký hoặc đăng nhập tài khoản trước!");
+                showNotification("Cảnh báo", "Bạn cần đăng ký hoặc đăng nhập tài khoản trước!", false);
                 viewId = 'auth';
             }
             document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
@@ -298,12 +342,18 @@
         function handleRegister() {
             const user = document.getElementById('reg-user').value.trim();
             const pass = document.getElementById('reg-pass').value.trim();
-            if(!user || !pass) return alert("Không để trống!");
+            if(!user || !pass) {
+                showNotification("Lỗi", "Vui lòng điền đầy đủ tên tài khoản và mật khẩu!", false);
+                return;
+            }
             usersDB = JSON.parse(localStorage.getItem('sys_v8_users_db'));
-            if(usersDB[user]) return alert("Tài khoản đã tồn tại!");
+            if(usersDB[user]) {
+                showNotification("Thất bại", "Tài khoản này đã tồn tại trên hệ thống!", false);
+                return;
+            }
             usersDB[user] = { password: pass, balance: 0, role: "user" };
             localStorage.setItem('sys_v8_users_db', JSON.stringify(usersDB));
-            alert("Đăng ký thành công!");
+            showNotification("Thành công", "Đăng ký tài khoản mới thành công!", true);
             toggleAuthTab('login');
         }
 
@@ -311,7 +361,10 @@
             const user = document.getElementById('login-user').value.trim();
             const pass = document.getElementById('login-pass').value.trim();
             usersDB = JSON.parse(localStorage.getItem('sys_v8_users_db'));
-            if(!usersDB[user] || usersDB[user].password !== pass) return alert("Sai tài khoản hoặc mật khẩu!");
+            if(!usersDB[user] || usersDB[user].password !== pass) {
+                showNotification("Lỗi đăng nhập", "Sai tài khoản hoặc mật khẩu, vui lòng thử lại!", false);
+                return;
+            }
 
             currentUser = { username: user, balance: usersDB[user].balance, role: usersDB[user].role };
             localStorage.setItem('sys_v8_current_user', JSON.stringify(currentUser));
@@ -338,9 +391,13 @@
 
         function generateDepositQR() {
             const amount = parseInt(document.getElementById('input-deposit').value);
-            if (isNaN(amount) || amount <= 0) return alert("Vui lòng nhập số tiền nạp hợp lệ!");
+            if (isNaN(amount) || amount <= 0) {
+                showNotification("Lỗi nhập liệu", "Vui lòng nhập số tiền nạp hợp lệ!", false);
+                return;
+            }
             if (amount < minDepositLimit) {
-                return alert(`Số tiền nạp tối thiểu shop cấu hình là: ${minDepositLimit.toLocaleString('vi-VN')}đ`);
+                showNotification("Hạn mức tối thiểu", `Số tiền nạp tối thiểu shop cấu hình là: ${minDepositLimit.toLocaleString('vi-VN')}đ`, false);
+                return;
             }
 
             activeTempDepositAmount = amount;
@@ -367,7 +424,7 @@
             localStorage.setItem('sys_v8_deposit_tickets', JSON.stringify(depositTickets));
 
             sendTelegramNotification(`🔔 <b>YÊU CẦU DUYỆT NẠP TIỀN</b>\n• Tài khoản: <code>${newTicket.username}</code>\n• Số tiền nạp: <b>${newTicket.amount.toLocaleString('vi-VN')}đ</b>\n• Mã giao dịch: <code>${newTicket.ticketId}</code>\n<i>Vui lòng vào Admin quản trị để xử lý duyệt.</i>`);
-            alert(`🚀 Đã gửi yêu cầu nạp tiền thành công! Mã giao dịch: [${ticketId}].`);
+            showNotification("Đã gửi yêu cầu", `🚀 Đã gửi yêu cầu nạp tiền thành công! Mã giao dịch: [${ticketId}].`, true);
             activeTempDepositAmount = 0;
             document.getElementById('qr-result-box').classList.add('hidden');
             navigateTo('shop');
@@ -401,14 +458,15 @@
             });
         }
 
-        // KHI ẤN VÀO MUA: HIỂN THỊ MÔ TẢ, SỐ LƯỢNG VÀ Ô MÃ GIẢM GIÁ
         function openCheckoutPage(productId) {
             const p = products.find(i => i.id === productId);
-            if(!p || !p.accounts || p.accounts.length === 0) return alert("Hết hàng!");
+            if(!p || !p.accounts || p.accounts.length === 0) {
+                showNotification("Hết hàng", "Sản phẩm hiện đã hết hàng trong kho!", false);
+                return;
+            }
             
             let basePrice = currentUser.role === 'ctv' ? p.price * 0.9 : p.price;
             
-            // Cấu hình object giỏ hàng mặc định ban đầu
             currentCheckoutItem = { 
                 ...p, 
                 currentPrice: basePrice, 
@@ -421,7 +479,6 @@
             updateCheckoutUI();
         }
 
-        // TÁI DỰNG GIAO DIỆN HOÁ ĐƠN THANH TOÁN KHI CÓ SỰ THAY ĐỔI
         function updateCheckoutUI() {
             const detailZone = document.getElementById('checkout-details');
             const originCost = currentCheckoutItem.currentPrice * currentCheckoutItem.quantity;
@@ -455,7 +512,7 @@
                 <div class="bg-[#1a2333] p-4 rounded-xl border border-slate-700 space-y-2">
                     <label class="block text-xs font-bold text-white">Mã giảm giá (Coupon):</label>
                     <div class="flex gap-2">
-                        <input type="text" id="coupon-input" value="${currentCheckoutItem.appliedCoupon}" placeholder="Nhập mã coupon nếu có..." class="flex-grow bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-xs uppercase font-bold text-white focus:outline-none">
+                        <input type="text" id="coupon-input" value="${currentCheckoutItem.appliedCoupon}" placeholder="Nhập mã giảm giá nếu có..." class="flex-grow bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-xs uppercase font-bold text-white focus:outline-none">
                         <button onclick="applyCouponCode()" class="bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold px-4 py-2 rounded-lg text-xs transition uppercase">Áp dụng</button>
                     </div>
                     ${currentCheckoutItem.discountPercent > 0 ? `<p class="text-xs text-emerald-400 font-medium"><i class="fa-solid fa-circle-check"></i> Đã áp mã thành công! Giảm ngay ${currentCheckoutItem.discountPercent}% vào hóa đơn.</p>` : ''}
@@ -477,57 +534,60 @@
             `;
         }
 
-        // LOGIC TĂNG GIẢM SỐ LƯỢNG MUA TẠI TRANG CHECKOUT
         function changeCheckoutQty(delta) {
             let targetQty = currentCheckoutItem.quantity + delta;
             if (targetQty < 1) return;
             if (targetQty > currentCheckoutItem.maxStock) {
-                return alert(`Kho hàng hiện tại chỉ còn lại tối đa ${currentCheckoutItem.maxStock} tài khoản!`);
+                showNotification("Vượt giới hạn", `Kho hàng hiện tại chỉ còn lại tối đa ${currentCheckoutItem.maxStock} tài khoản!`, false);
+                return;
             }
             currentCheckoutItem.quantity = targetQty;
             updateCheckoutUI();
         }
 
-        // LOGIC ÁP DỤNG COUPON GIẢM GIÁ
         function applyCouponCode() {
             const codeInput = document.getElementById('coupon-input').value.trim().toUpperCase();
-            if (!codeInput) return alert("Vui lòng nhập mã giảm giá!");
+            if (!codeInput) {
+                showNotification("Lỗi mã", "Vui lòng nhập mã giảm giá trước khi áp dụng!", false);
+                return;
+            }
 
             const foundCoupon = coupons.find(c => c.code === codeInput);
             if (!foundCoupon) {
                 currentCheckoutItem.discountPercent = 0;
                 currentCheckoutItem.appliedCoupon = '';
                 updateCheckoutUI();
-                return alert("Mã giảm giá này không hợp lệ hoặc đã hết hạn sử dụng!");
+                showNotification("Lỗi áp mã", "Mã giảm giá này không hợp lệ hoặc đã hết hạn sử dụng!", false);
+                return;
             }
 
             currentCheckoutItem.discountPercent = parseInt(foundCoupon.discount);
             currentCheckoutItem.appliedCoupon = foundCoupon.code;
             updateCheckoutUI();
-            alert(`🎉 Chúc mừng! Đã áp dụng thành công mã [${foundCoupon.code}] giảm ${foundCoupon.discount}%`);
+            showNotification("Áp mã thành công", `🎉 Chúc mừng! Đã áp dụng thành công mã [${foundCoupon.code}] giảm ${foundCoupon.discount}%`, true);
         }
 
-        // THỰC HIỆN TRỪ TIỀN VÀ XUẤT ACC THEO ĐÚNG SỐ LƯỢNG USER ĐẶT MUA
         function executeOrderPayment() {
             const originCost = currentCheckoutItem.currentPrice * currentCheckoutItem.quantity;
             const discountAmount = originCost * (currentCheckoutItem.discountPercent / 100);
             const finalCost = originCost - discountAmount;
 
-            if (currentUser.balance < finalCost) return alert("Số dư tài khoản ví của bạn không đủ để thanh toán đơn hàng này! Vui lòng nạp thêm tiền.");
+            if (currentUser.balance < finalCost) {
+                showNotification("Số dư không đủ", "Số dư ví của bạn không đủ để thanh toán đơn hàng! Vui lòng nạp thêm tiền.", false);
+                return;
+            }
 
             const pIndex = products.findIndex(item => item.id === currentCheckoutItem.id);
             if (products[pIndex].accounts.length < currentCheckoutItem.quantity) {
-                return alert("Kho hàng vừa có sự thay đổi, số lượng acc hiện tại không đủ giao dịch!");
+                showNotification("Kho thay đổi", "Kho hàng vừa có sự thay đổi, số lượng acc hiện tại không đủ giao dịch!", false);
+                return;
             }
 
-            // Cắt đúng số lượng tài khoản (ví dụ mua 2 acc thì lấy ra 2 acc từ đầu mảng)
             const deliveredAccounts = products[pIndex].accounts.splice(0, currentCheckoutItem.quantity);
 
-            // Cập nhật số dư người dùng
             currentUser.balance -= finalCost;
             usersDB[currentUser.username].balance = currentUser.balance;
 
-            // Đẩy vào lịch sử mua hàng
             ordersHistory.unshift({
                 orderId: "DH" + Math.floor(100000 + Math.random() * 900000),
                 username: currentUser.username,
@@ -538,14 +598,13 @@
                 dateStr: new Date().toLocaleString('vi-VN')
             });
 
-            // Lưu thay đổi vào hệ thống LocalStorage V8
             localStorage.setItem('sys_v8_products', JSON.stringify(products));
             localStorage.setItem('sys_v8_users_db', JSON.stringify(usersDB));
             localStorage.setItem('sys_v8_history', JSON.stringify(ordersHistory));
             localStorage.setItem('sys_v8_current_user', JSON.stringify(currentUser));
 
             initSession();
-            alert(`🎉 Giao dịch thành công! Bạn vừa mua thành công ${currentCheckoutItem.quantity} tài khoản.`);
+            showNotification("Mua thành công", `🎉 Giao dịch thành công! Bạn vừa mua thành công ${currentCheckoutItem.quantity} tài khoản.`, true);
             navigateTo('history');
         }
 
@@ -640,13 +699,16 @@
             const desc = document.getElementById('admin-p-desc').value.trim();
             const price = parseInt(document.getElementById('admin-p-price').value);
             const textAcc = document.getElementById('admin-p-accounts').value.trim();
-            if(!name || isNaN(price)) return alert("Thiếu thông tin!");
+            if(!name || isNaN(price)) {
+                showNotification("Lỗi dữ liệu", "Vui lòng nhập đầy đủ tên và giá sản phẩm hợp lệ!", false);
+                return;
+            }
             
             let arrAccs = textAcc ? textAcc.split('\n').map(l => l.trim()).filter(l => l.length > 0) : [];
             products.push({ id: Date.now(), name, logo, desc, price, accounts: arrAccs });
             localStorage.setItem('sys_v8_products', JSON.stringify(products));
             renderAdminProducts();
-            alert("Đã đăng bán!");
+            showNotification("Thành công", "Đã thêm mới và đăng bán sản phẩm thành công!", true);
         }
 
         function adminDeleteProduct(id) {
@@ -680,7 +742,6 @@
             renderAdminUsers();
         }
 
-        // QUẢN LÝ DANH SÁCH MÃ GIẢM GIÁ TẠI ADMIN PANEL
         function renderAdminCoupons() {
             const tbody = document.getElementById('admin-coupon-table-body');
             tbody.innerHTML = '';
@@ -707,10 +768,14 @@
             const discount = parseInt(document.getElementById('admin-c-discount').value);
             
             if (!code || isNaN(discount) || discount <= 0 || discount > 100) {
-                return alert("Vui lòng điền thông tin mã và tỷ lệ phần trăm hợp lệ (1-100)!");
+                showNotification("Lỗi cấu hình", "Thông tin mã hoặc tỷ lệ phần trăm giảm giá không đúng (1-100)!", false);
+                return;
             }
             
-            if (coupons.some(c => c.code === code)) return alert("Mã giảm giá này đã tồn tại!");
+            if (coupons.some(c => c.code === code)) {
+                showNotification("Trùng mã", "Mã giảm giá này đã tồn tại trên hệ thống!", false);
+                return;
+            }
             
             coupons.push({ code, discount });
             localStorage.setItem('sys_v8_coupons', JSON.stringify(coupons));
@@ -718,7 +783,7 @@
             document.getElementById('admin-c-code').value = '';
             document.getElementById('admin-c-discount').value = '';
             renderAdminCoupons();
-            alert(`Phát hành mã giảm giá [${code}] giảm ${discount}% thành công!`);
+            showNotification("Phát hành thành công", `Phát hành mã giảm giá [${code}] giảm ${discount}% thành công!`, true);
         }
 
         function adminDeleteCoupon(index) {
@@ -729,17 +794,25 @@
 
         function saveSystemConfigAll() {
             const newMinInput = parseInt(document.getElementById('admin-sys-min-deposit').value);
-            if (isNaN(newMinInput) || newMinInput < 0) return alert("Hạn mức không hợp lệ!");
+            if (isNaN(newMinInput) || newMinInput < 0) {
+                showNotification("Lỗi", "Hạn mức tiền nạp tối thiểu không hợp lệ!", false);
+                return;
+            }
             minDepositLimit = newMinInput;
             localStorage.setItem('sys_v8_min_deposit', minDepositLimit.toString());
 
             teleConfig.token = document.getElementById('tele-token').value.trim();
             teleConfig.chatId = document.getElementById('tele-chatid').value.trim();
             localStorage.setItem('sys_v8_tele_config', JSON.stringify(teleConfig));
-            alert("Đã lưu cấu hình hệ thống!");
+            showNotification("Hệ thống", "Đã lưu toàn bộ cấu hình hệ thống và API Telegram thành công!", true);
         }
 
         window.onload = function() {
+            // Tự động thông báo sẵn sàng với Telegram SDK khi bật webapp
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.ready();
+                window.Telegram.WebApp.expand(); // Mở rộng full màn hình trên Telegram
+            }
             if (currentUser) { initSession(); navigateTo('shop'); } else { navigateTo('auth'); }
         };
     </script>
